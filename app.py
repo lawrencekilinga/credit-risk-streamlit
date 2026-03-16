@@ -2,25 +2,32 @@ import streamlit as st
 import joblib
 import pandas as pd
 
-# Load trained model
-model = joblib.load("credit_risk_model.pkl")
+# Page configuration
+st.set_page_config(
+    page_title="Microcredit Risk Dashboard",
+    page_icon="💳",
+    layout="wide"
+)
 
-# Extract training feature names
+# Load model
+model = joblib.load("credit_risk_model.pkl")
 feature_names = model.feature_names_in_
 
-st.title("Microcredit Default Risk Prediction")
-
-st.write("Enter borrower loan details to predict credit risk.")
+# Title
+st.title("💳 Microcredit Risk Assessment Dashboard")
+st.markdown("Machine Learning powered **Loan Default Prediction System**")
 
 # -------------------------
-# USER INPUTS
+# SIDEBAR INPUTS
 # -------------------------
 
-disbursed_amount = st.number_input("Loan Amount", min_value=0)
+st.sidebar.header("Loan Details")
 
-tenor = st.number_input("Loan Tenor (months)", min_value=1)
+disbursed_amount = st.sidebar.number_input("Loan Amount", min_value=0)
 
-sector = st.selectbox(
+tenor = st.sidebar.number_input("Loan Tenor (months)", min_value=1)
+
+sector = st.sidebar.selectbox(
     "Sector",
     [
         "Boda Boda",
@@ -35,77 +42,84 @@ sector = st.selectbox(
     ]
 )
 
-payment_frequency = st.selectbox(
+payment_frequency = st.sidebar.selectbox(
     "Payment Frequency",
     ["Weekly", "Monthly"]
 )
+
+predict_button = st.sidebar.button("Run Credit Risk Assessment")
 
 # -------------------------
 # PREDICTION
 # -------------------------
 
-if st.button("Predict Default Risk"):
+if predict_button:
 
-    # Create dataframe with all model features initialized to zero
     input_data = pd.DataFrame(columns=feature_names)
     input_data.loc[0] = 0
 
-    # Fill user input features
     if "disbursed_amount" in input_data.columns:
         input_data["disbursed_amount"] = disbursed_amount
 
     if "tenor" in input_data.columns:
         input_data["tenor"] = tenor
 
-    # Sector encoding
     sector_column = f"sector_{sector}"
     if sector_column in input_data.columns:
         input_data[sector_column] = 1
 
-    # Payment frequency encoding
     if payment_frequency == "Weekly":
         if "payment_frequency_Weekly" in input_data.columns:
             input_data["payment_frequency_Weekly"] = 1
 
-    # Model prediction
     prediction = model.predict(input_data)[0]
     probability = model.predict_proba(input_data)[0][1]
 
-    # -------------------------
-    # PREDICTION RESULT
-    # -------------------------
-
-    st.subheader("Default Risk Prediction")
-
-    if prediction == 1:
-        st.error(f"High Default Risk (Probability: {probability:.2f})")
-    else:
-        st.success(f"Low Default Risk (Probability: {probability:.2f})")
+    risk_percent = int(probability * 100)
 
     # -------------------------
-    # CREDIT RISK METER
+    # TOP METRICS
+    # -------------------------
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Loan Amount", f"{disbursed_amount:,.0f}")
+    col2.metric("Tenor (months)", tenor)
+    col3.metric("Default Probability", f"{risk_percent}%")
+
+    st.divider()
+
+    # -------------------------
+    # CREDIT SCORE
+    # -------------------------
+
+    credit_score = int((1 - probability) * 850)
+
+    st.subheader("Credit Score")
+
+    st.metric(
+        label="Borrower Credit Score",
+        value=credit_score
+    )
+
+    # -------------------------
+    # RISK METER
     # -------------------------
 
     st.subheader("Credit Risk Meter")
 
-    risk_percentage = int(probability * 100)
+    st.progress(risk_percent)
 
-    st.progress(risk_percentage)
-
-    st.write(f"Default Probability: {risk_percentage}%")
-
-    if risk_percentage < 30:
+    if risk_percent < 30:
         st.success("Low Risk Borrower")
-    elif risk_percentage < 60:
+    elif risk_percent < 60:
         st.warning("Moderate Risk Borrower")
     else:
-        st.error("High Risk Borrower")
+        st.error("High Default Risk")
 
     # -------------------------
     # INTEREST CALCULATION
     # -------------------------
-
-    st.subheader("Estimated Interest Charged")
 
     sector_rates = {
         "Boda Boda": 0.36,
@@ -123,19 +137,22 @@ if st.button("Predict Default Risk"):
 
     estimated_interest = disbursed_amount * sector_rate * (tenor / 12)
 
-    st.write(f"Sector Interest Rate: {sector_rate*100:.1f}% APR")
+    st.subheader("Estimated Loan Interest")
 
-    st.write(f"Estimated Interest Over Loan Period: **{estimated_interest:,.2f}**")
+    col1, col2 = st.columns(2)
+
+    col1.metric("Sector APR", f"{sector_rate*100:.1f}%")
+    col2.metric("Estimated Interest", f"{estimated_interest:,.0f}")
 
     # -------------------------
-    # SIMPLE LOAN DECISION
+    # LOAN DECISION
     # -------------------------
 
     st.subheader("Loan Recommendation")
 
-    if risk_percentage < 30:
-        st.success("Loan Approved – Low Risk Borrower")
-    elif risk_percentage < 60:
-        st.warning("Loan Requires Manual Review")
+    if risk_percent < 30:
+        st.success("Loan Approved")
+    elif risk_percent < 60:
+        st.warning("Manual Credit Review Required")
     else:
-        st.error("Loan Rejected – High Default Risk")
+        st.error("Loan Rejected – High Risk")
